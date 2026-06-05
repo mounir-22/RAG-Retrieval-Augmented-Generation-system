@@ -17,7 +17,6 @@ from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_community.retrievers import BM25Retriever
-from langchain.retrievers import EnsembleRetriever
 from langchain_core.documents import Document
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -122,6 +121,39 @@ Structured list:"""
 
 # ── Module-level reranker singleton (loaded once per process) ─────────────────
 _reranker = None
+
+
+class HybridRetriever:
+    """Minimal weighted rank-fusion retriever used to avoid LangChain import drift.
+
+    The app only needs two capabilities here:
+    - a `.retrievers` list so `_set_retriever_k` can tune recall dynamically
+    - an `.invoke(query)` method that returns merged candidate documents
+    """
+
+    def __init__(self, retrievers: list, weights: list):
+        self.retrievers = retrievers
+        self.weights = weights
+
+    def invoke(self, query: str) -> list:
+        ranked_scores = {}
+        ranked_docs = {}
+
+        for retriever, weight in zip(self.retrievers, self.weights):
+            docs = retriever.invoke(query)
+            for rank, doc in enumerate(docs, start=1):
+                key = (
+                    doc.metadata.get("source", ""),
+                    doc.metadata.get("page", ""),
+                    doc.metadata.get("section", ""),
+                    doc.metadata.get("chunk_index", ""),
+                    doc.page_content[:240],
+                )
+                ranked_docs[key] = doc
+                ranked_scores[key] = ranked_scores.get(key, 0.0) + (weight / rank)
+
+        ordered_keys = sorted(ranked_scores, key=ranked_scores.get, reverse=True)
+        return [ranked_docs[key] for key in ordered_keys]
 
 
 def _get_reranker():
@@ -314,7 +346,7 @@ def build_or_load_vectorstore(language: str = "fr", selected_files=None) -> tupl
     return vectordb, chunks, {"files": selected, "chunks": chunk_count, "language": language}
 
 
-def build_hybrid_retriever(vectordb, chunks) -> EnsembleRetriever:
+def build_hybrid_retriever(vectordb, chunks) -> HybridRetriever:
     """
     Hybrid Retrieval: 60% vector similarity + 40% BM25 keyword search.
     Fetches top-20 candidates for reranking.
@@ -326,7 +358,7 @@ def build_hybrid_retriever(vectordb, chunks) -> EnsembleRetriever:
     vector_ret = vectordb.as_retriever(search_kwargs={"k": 20})
     bm25_ret = BM25Retriever.from_documents(chunks)
     bm25_ret.k = 20
-    return EnsembleRetriever(
+    return HybridRetriever(
         retrievers=[bm25_ret, vector_ret],
         weights=[0.4, 0.6],
     )
