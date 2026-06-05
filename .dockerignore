@@ -1,0 +1,11 @@
+.git/
+.gitignore
+.conda/
+__pycache__/
+.vscode/
+.streamlit/
+chroma_db/
+*.db
+*.json
+*.csv
+*.ipynb

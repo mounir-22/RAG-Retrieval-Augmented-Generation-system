@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environments
+.env
+.conda/
+.venv/
+venv/
+
+# Generated / runtime
+chroma_db/
+*.db
+knowledge_graph_*.json
+rag_test_data_*.csv
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store

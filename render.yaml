@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: rag-retrieval-augmented-generation-system
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m streamlit run st_app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
